@@ -702,7 +702,7 @@ class GFPersian_Gateway_PackPay
 
         $pageURL = GFCommon::is_ssl() ? 'https://' : 'http://';
 
-        if ($_SERVER['SERVER_PORT'] != '80') {
+        if ($_SERVER['SERVER_PORT'] != '80' && $_SERVER['SERVER_PORT'] != '443') {
             $pageURL .= $_SERVER['SERVER_NAME'] . ':' . $_SERVER['SERVER_PORT'] . $_SERVER['REQUEST_URI'];
         } else {
             $pageURL .= $_SERVER['SERVER_NAME'] . $_SERVER['REQUEST_URI'];
@@ -2203,7 +2203,8 @@ class GFPersian_Gateway_PackPay
             $ReturnPath = urlencode($ReturnPath);
             $nameParam = $name ? "&payer_name=" . urlencode($name) : "";
             $mobileParam = $Mobile ? "&payer_id=$Mobile" : "";
-            $url = "https://dashboard.packpay.ir/developers/bank/api/v1/purchase?amount=$Amount$mobileParam$nameParam&callback_url=$ReturnPath";
+            $url = "https://dashboard.packpay.ir/developers/bank/api/v1/purchase?amount=$Amount$mobileParam$nameParam" .
+                "&callback_url=$ReturnPath&verify_on_request=true";
 
             $headers = array();
             $headers[] = 'Accept: application/json';
@@ -2213,7 +2214,8 @@ class GFPersian_Gateway_PackPay
                 "amount" => $Amount,
                 'callback_url' => $ReturnPath,
                 'payer_name' => $name,
-                'payer_id' => $Mobile
+                'payer_id' => $Mobile,
+                'verify_on_request' => true
             ];
             $result = self::post2http($body, $url, $headers);
             $result = json_decode($result);
@@ -2350,32 +2352,24 @@ class GFPersian_Gateway_PackPay
                     $token = self::get_token();
                     try {
                         $headers = array();
-                        $payerId = isset($Mobile) && $Mobile != '' ? '&payer_id=' . $Mobile : '';
                         $headers[] = 'Accept: application/json;charset=UTF-8';
-                        $url = "https://dashboard.packpay.ir/developers/bank/api/v1/purchase?reference_code=$refCode$payerId";
+                        $url = "https://dashboard.packpay.ir/developers/bank/api/v1/purchase/verify?reference_code=$refCode";
                         $headers[] = 'Authorization: Bearer ' . $token->access_token;
 
-                        $result = self::getHttpReq($url, $headers);
-                        if ($result->status == 0) {
-                            if ($result->data[0]->transactionStatus == 'موفق' && $result->data[0]->amount == $Amount) {
-                                $Message = $refCode;
-                                $Status = 'completed';
-                            } else if ($result->data[0]->transactionStatus == 'موفق') {
-                                $Message = 'مبلغ خرید با مبلغ انتظار متفاوت است';
-                                $Status = 'failed';
-                            } else if ($result->data[0]->transactionStatus == 'ناموفق') {
-                                $Message = 'کنسل شده';
-                                $Status = 'cancelled';
-                            } else {
-                                $Message = 'تایید نشدن تراکنش';
-                                $Status = 'failed';
-                            }
+                        $body = [
+                            "reference_code" => $refCode
+                        ];
+
+                        $result = self::post2http($body, $url, $headers);
+                        $result = json_decode($result);
+
+                        if ($result->status == 0 && $result->message == 'successful') {
+                            $Message = $refCode;
+                            $Status = 'completed';
                         } else {
-                            $Message = 'خطا بانکی';
+                            $Message = 'ناموفق';
                             $Status = 'failed';
                         }
-
-
                     } catch (Exception $ex) {
                         $Message = $ex->getMessage();
                         $Status = 'failed';
